@@ -3,19 +3,14 @@
 const CACHE_NAME = "my-app-cache-v1"
 const OFFLINE_PAGE = "/offline.html"
 
-// Pre-cache app shell
 const ASSETS_TO_CACHE = [
 	"/",
 	"/index.html",
-	"/offline.html",
+	OFFLINE_PAGE,
 	"/favicon.ico",
-	"/logo192.png",
-	"/logo512.png",
 	"/manifest.json",
-	// Add other known CSS, JS, fonts, images here
 ]
 
-// Install: cache app shell
 self.addEventListener("install", (event) => {
 	event.waitUntil(
 		caches.open(CACHE_NAME).then((cache) => {
@@ -25,7 +20,6 @@ self.addEventListener("install", (event) => {
 	self.skipWaiting()
 })
 
-// Activate: clean old caches
 self.addEventListener("activate", (event) => {
 	event.waitUntil(
 		caches
@@ -41,31 +35,28 @@ self.addEventListener("activate", (event) => {
 	self.clients.claim()
 })
 
-// Fetch: serve cached first, then network, then fallback
 self.addEventListener("fetch", (event) => {
-	const { request } = event
+	const request = event.request
 
-	// Only handle GET requests
 	if (request.method !== "GET") return
 
+	// Handle page navigation
+	if (request.mode === "navigate") {
+		event.respondWith(fetch(request).catch(() => caches.match("/offline.html")))
+		return
+	}
+
+	// Handle assets (favicon, css, js, images)
 	event.respondWith(
 		caches.match(request).then((cachedResponse) => {
 			if (cachedResponse) return cachedResponse
 
-			return fetch(request)
-				.then((networkResponse) => {
-					// Cache API responses or assets dynamically
-					return caches.open(CACHE_NAME).then((cache) => {
-						cache.put(request, networkResponse.clone())
-						return networkResponse
-					})
+			return fetch(request).then((networkResponse) => {
+				return caches.open(CACHE_NAME).then((cache) => {
+					cache.put(request, networkResponse.clone())
+					return networkResponse
 				})
-				.catch(() => {
-					// Offline fallback
-					if (request.destination === "document") {
-						return caches.match(OFFLINE_PAGE)
-					}
-				})
+			})
 		}),
 	)
 })
